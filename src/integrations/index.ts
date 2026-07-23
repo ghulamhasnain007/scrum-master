@@ -12,6 +12,7 @@ import { MongoIntegrationStore } from './store/mongo/MongoIntegrationStore.js';
 import { MongoCredentialsStore } from './store/mongo/MongoCredentialsStore.js';
 import { OAuthService } from './OAuthService.js';
 import registerIntegrationRoutes from './routes/integrations.js';
+import registerDiscordMeetingRoutes from './routes/discordMeetings.js';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -81,6 +82,7 @@ export async function setupIntegrations(fastify: FastifyInstance): Promise<void>
   );
 
   registerIntegrationRoutes(fastify, { oauth, store, credentialsStore });
+  registerDiscordMeetingRoutes(fastify, { credentialsStore });
 
   fastify.log.info(
     {

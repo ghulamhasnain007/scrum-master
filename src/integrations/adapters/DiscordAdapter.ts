@@ -31,8 +31,8 @@ export class DiscordAdapter implements MeetingProviderAdapter {
     docsUrl: 'https://discord.com/developers/docs/topics/voice-connections',
     notes:
       'The bot joins a voice channel directly and streams Opus audio both ways via the Discord voice gateway. ' +
-      'enableForMeeting() here only validates the request — the actual join is owned by DiscordVoiceSession, ' +
-      'a long-lived Gateway connection that does not fit this adapter\'s stateless request/response shape.',
+      'Starting/stopping an actual standup happens through /integrations/discord/meetings/* (see ' +
+      'discord/DiscordMeetingRoom.ts), not through this adapter\'s OAuth/webhook methods.',
   };
 
   constructor(private readonly config: DiscordAdapterConfig) {}
@@ -100,14 +100,9 @@ export class DiscordAdapter implements MeetingProviderAdapter {
   }
 
   /** "Enabling" the assistant for a Discord meeting means joining its voice channel. */
-  async enableForMeeting(_tokens: OAuthTokenSet, meeting: MeetingRef): Promise<void> {
-    // A real voice-channel join needs a persistent Gateway connection (identified
-    // with the bot token) plus a UDP voice session — not a single REST call.
-    // See DiscordVoiceSession.ts for that runtime piece; wiring this method
-    // through to it is the one part of this adapter that needs a long-lived
-    // process rather than a stateless request handler.
-    throw new Error(
-      `Voice-channel join for ${meeting.externalMeetingId} requires the DiscordVoiceSession runtime — see adapters/DiscordVoiceSession.ts`
-    );
-  }
+  // Note: joining a voice channel is NOT done through this adapter's
+  // enableForMeeting() hook — that hook models a single stateless REST call,
+  // which doesn't fit a long-lived Gateway + voice session. See
+  // discord/DiscordMeetingRoom.ts and routes/discordMeetings.ts for the real
+  // implementation, wired in separately via /integrations/discord/meetings/*.
 }
