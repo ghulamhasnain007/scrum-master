@@ -1,0 +1,32 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+node_modules
+node_modules/*
+dist
+dist-ssr
+*.local
+.env
+.env.*
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+build
+dist.zip
+dist.rar
+create_default_role.json
+main-docker-compose.yaml
+main-docker-compose.yaml
+dummy_payloads.json
