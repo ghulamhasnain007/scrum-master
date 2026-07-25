@@ -45,3 +45,16 @@ export function gemini24kMonoToDiscord48kStereo(input: Buffer): Buffer {
   }
   return out;
 }
+
+/** Peak amplitude of a PCM16 buffer, normalized 0–1. Used purely for
+ *  diagnostics — logging this tells us whether audio reaching Gemini
+ *  actually contains signal or is silence/near-silence, which is otherwise
+ *  invisible (a byte count alone doesn't tell you if the bytes are real). */
+export function pcm16PeakLevel(buf: Buffer): number {
+  let peak = 0;
+  for (let i = 0; i + 1 < buf.length; i += 2) {
+    const s = Math.abs(buf.readInt16LE(i));
+    if (s > peak) peak = s;
+  }
+  return peak / 32768;
+}

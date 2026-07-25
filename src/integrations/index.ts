@@ -13,6 +13,10 @@ import { MongoCredentialsStore } from './store/mongo/MongoCredentialsStore.js';
 import { OAuthService } from './OAuthService.js';
 import registerIntegrationRoutes from './routes/integrations.js';
 import registerDiscordMeetingRoutes from './routes/discordMeetings.js';
+import registerScheduleRoutes from './routes/schedules.js';
+import { MongoScheduledMeetingStore } from './store/mongo/MongoScheduledMeetingStore.js';
+import { SchedulerService } from './scheduling/SchedulerService.js';
+import { DiscordLauncher } from './scheduling/launchers/DiscordLauncher.js';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -83,6 +87,26 @@ export async function setupIntegrations(fastify: FastifyInstance): Promise<void>
 
   registerIntegrationRoutes(fastify, { oauth, store, credentialsStore });
   registerDiscordMeetingRoutes(fastify, { credentialsStore });
+
+  // Scheduling is Mongo-only for now (per the brief: "my database for now"),
+  // independent of INTEGRATIONS_STORAGE_DRIVER above — so this works even
+  // when credentials/connections are on the file driver. If MONGODB_URI
+  // isn't set at all, scheduling just doesn't come up (rather than crashing
+  // boot) so local dev without Mongo still works for everything else.
+  if (process.env.MONGODB_URI) {
+    await connectMongo(process.env.MONGODB_URI); // no-op if already connected via createStores() above
+    const scheduleStore = new MongoScheduledMeetingStore();
+
+    const scheduler = new SchedulerService(scheduleStore);
+    scheduler.registerLauncher(new DiscordLauncher(credentialsStore));
+    scheduler.start();
+    fastify.addHook('onClose', (_instance, done) => { scheduler.stop(); done(); });
+
+    registerScheduleRoutes(fastify, { store: scheduleStore });
+    fastify.log.info('[integrations] scheduling enabled (MongoDB)');
+  } else {
+    fastify.log.warn('[integrations] MONGODB_URI not set — meeting scheduling is disabled');
+  }
 
   fastify.log.info(
     {

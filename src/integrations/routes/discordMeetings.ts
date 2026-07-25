@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { CredentialsStore } from '../store/CredentialsStore.js';
 import { getDiscordClient, listGuildVoiceChannels } from '../discord/DiscordBotClient.js';
-import { startDiscordMeeting, stopDiscordMeeting, getDiscordMeeting } from '../discord/DiscordMeetingManager.js';
+import { startDiscordMeeting, stopDiscordMeeting, getDiscordMeeting, listActiveDiscordMeetings } from '../discord/DiscordMeetingManager.js';
 
 // Matches the single-org simplification used throughout routes/integrations.ts.
 const ORG_ID = 'default';
@@ -53,6 +53,11 @@ export default function registerDiscordMeetingRoutes(
     if (!guildId) return reply.code(400).send({ error: 'guildId is required' });
     await stopDiscordMeeting(guildId);
     return { stopped: true, guildId };
+  });
+
+  // ── Which servers currently have a meeting running (for UI auto-discovery) ──
+  fastify.get('/integrations/discord/meetings/active', async () => {
+    return { guildIds: listActiveDiscordMeetings() };
   });
 
   // ── Poll current meeting state (participants, phase, standup data, transcript) ─

@@ -4,9 +4,12 @@ export const config = {
   port: parseInt(process.env.PORT ?? '3001', 10),
   host: process.env.HOST ?? '0.0.0.0',
   geminiApiKey: process.env.GEMINI_API_KEY ?? '',
-  // gemini-2.5-flash-native-audio-preview-12-2025 gives the best voice quality;
-  // falls back to gemini-2.0-flash-live-001 which is GA and free-tier friendly.
-  geminiModel: process.env.GEMINI_MODEL ?? 'gemini-2.5-flash-native-audio-preview-12-2025',
+  // gemini-3.1-flash-live-preview is the current recommended default for
+  // voice-first builds — stronger reliable function calling, and (unlike
+  // the older 2.5 native-audio preview) doesn't reject realtimeInput.audio
+  // mid-session with a 1007 "CONTENT_TYPE_AUDIO not supported" close once
+  // clientContent has been mixed in anywhere in the session's history.
+  geminiModel: process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-live-preview',
   defaultMeetingDurationMs: 5 * 60 * 1000,
   corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
 } as const;

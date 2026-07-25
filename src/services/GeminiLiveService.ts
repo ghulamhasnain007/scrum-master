@@ -269,8 +269,11 @@ export class GeminiLiveService {
         this.cb.onAudioDone();
       }
 
-      // Generation interrupted (user barged in)
+      // Generation interrupted (user barged in, or — over Discord without
+      // acoustic echo cancellation — the bot may be hearing its own voice
+      // through someone's speakers/mic and "interrupting" itself)
       if (sc.interrupted) {
+        console.log('[Gemini] generation interrupted mid-turn');
         this.outputTranscriptBuf = '';
         this.cb.onAudioDone();
       }
