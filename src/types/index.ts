@@ -37,6 +37,18 @@ export interface TranscriptEntry {
   timestamp: number;
 }
 
+export interface AudioDiagnostics {
+  packetsDecoded: number;
+  peakLevel: number;
+  chunksSentToGemini: number;
+  chunksDroppedByGate: number;
+  chunksSentToDiscord: number;
+  resubscribes: number;
+  aiSpeaking: boolean;
+  geminiDoneSendingAudio: boolean;
+  silenceSeconds: number;
+}
+
 export interface MeetingState {
   id: string;
   phase: MeetingPhase;
@@ -48,6 +60,7 @@ export interface MeetingState {
   standups: Record<string, ParticipantStandup>;
   transcript: TranscriptEntry[];
   isActive: boolean;
+  diagnostics?: AudioDiagnostics;
 }
 
 // ── Messages: Backend → Frontend ──────────────────────────────────────────────
