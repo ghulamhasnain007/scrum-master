@@ -25,12 +25,11 @@ function log(guildId: string, ...args: unknown[]): void {
 }
 
 /**
- * Runs one Daily Scrum inside a Discord voice channel. Deliberately reuses
- * MeetingStateService and GeminiLiveService completely unchanged from the
- * hosted web-meeting path (MeetingSession.ts) — same turn-taking logic,
- * same Gemini system prompt, same standup data model. Only the transport
- * differs: audio in/out comes from Discord's voice gateway instead of a
- * browser mic/speaker over WebSocket.
+ * Runs one Daily Scrum inside a Discord voice channel. Built on top of
+ * MeetingStateService and GeminiLiveService — same turn-taking logic, same
+ * Gemini system prompt, same standup data model as this project has used
+ * throughout. Discord is now the only meeting transport this app drives;
+ * audio in/out comes from Discord's voice gateway.
  *
  * Audio-in design: ONE continuous subscription per speaker turn, opened the
  * moment it becomes their turn and torn down only when the turn ends —
@@ -40,9 +39,8 @@ function log(guildId: string, ...args: unknown[]): void {
  * closed that subscription, and re-opening it reliably on the next burst
  * turned out to be exactly the bug that made the bot go silent after the
  * first exchange. Using `EndBehaviorType.Manual` and holding the stream
- * open for the whole turn mirrors how the browser-mic path already works
- * (continuous capture, Gemini's own VAD decides where speech starts/ends)
- * and removes that whole class of bug.
+ * open for the whole turn — continuous capture, Gemini's own VAD decides
+ * where speech starts/ends — removes that whole class of bug.
  */
 export class DiscordMeetingRoom {
   private stateService = new MeetingStateService();
@@ -59,12 +57,6 @@ export class DiscordMeetingRoom {
   private audioChunksSentToGemini = 0;
   private audioPacketsSent = 0; // chunks sent to Discord (Gemini's spoken responses)
   private peakLevelSinceHeartbeat = 0;
-  /** Accumulates decoded 16kHz mono chunks before sending to Gemini in
-   *  ~100ms batches (matching the browser mic path's cadence) instead of
-   *  firing a WebSocket message per 20ms Opus packet. */
-  private pendingAudio: Buffer[] = [];
-  private pendingAudioBytes = 0;
-  private static readonly SEND_BATCH_BYTES = 3_200; // 100ms @ 16kHz mono PCM16 (1600 samples * 2 bytes)
 
   private timerId: ReturnType<typeof setInterval> | null = null;
   private timeLimitFired = false;
@@ -160,10 +152,6 @@ export class DiscordMeetingRoom {
           clearTimeout(this.aiSpeakingGraceTimer);
           this.aiSpeakingGraceTimer = null;
         }
-        // Drop anything buffered right at this instant too, so a partial
-        // ~100ms mic chunk captured a moment ago never gets flushed later.
-        this.pendingAudio = [];
-        this.pendingAudioBytes = 0;
         this.playAudioChunk(chunk);
       },
       onAudioDone: () => {
@@ -292,9 +280,6 @@ export class DiscordMeetingRoom {
 
     opusStream.pipe(decoder);
 
-    this.pendingAudio = [];
-    this.pendingAudioBytes = 0;
-
     decoder.on('data', (pcm48kStereo: Buffer) => {
       this.audioPacketsReceived++;
       const pcm16kMono = discord48kStereoToGemini16kMono(pcm48kStereo);
@@ -312,29 +297,18 @@ export class DiscordMeetingRoom {
       // aiSpeakingGraceTimer). Still counted above for heartbeat visibility.
       if (this.aiSpeaking) return;
 
-      this.pendingAudio.push(pcm16kMono);
-      this.pendingAudioBytes += pcm16kMono.length;
-
-      if (this.pendingAudioBytes >= DiscordMeetingRoom.SEND_BATCH_BYTES) {
-        const combined = Buffer.concat(this.pendingAudio);
-        this.pendingAudio = [];
-        this.pendingAudioBytes = 0;
-        this.audioChunksSentToGemini++;
-        this.gemini?.sendAudio(combined.toString('base64'));
-      }
+      // Sent immediately, one Gemini message per decoded 20ms Opus packet —
+      // not batched into larger chunks. Batching trades latency for fewer
+      // WebSocket messages; for a live voice conversation the latency cost
+      // isn't worth it, and 50 small messages/sec is not meaningfully
+      // expensive for a single active call.
+      this.audioChunksSentToGemini++;
+      this.gemini?.sendAudio(pcm16kMono.toString('base64'));
     });
   }
 
   private teardownSubscription(): void {
     if (!this.currentSub) return;
-
-    if (this.pendingAudioBytes > 0) {
-      const combined = Buffer.concat(this.pendingAudio);
-      this.pendingAudio = [];
-      this.pendingAudioBytes = 0;
-      this.audioChunksSentToGemini++;
-      this.gemini?.sendAudio(combined.toString('base64'));
-    }
 
     const { opusStream, decoder } = this.currentSub;
     try { decoder.destroy(); } catch { /* already closed */ }
@@ -357,7 +331,7 @@ export class DiscordMeetingRoom {
     this.outputStream.write(pcm48kStereo);
   }
 
-  // ── Turn handoff — mirrors MeetingSession.handleTurnAdvance for parity ─────
+  // ── Turn handoff ──────────────────────────────────────────────────────────
 
   private handleTurnAdvance(): void {
     const finishing = this.stateService.getCurrentSpeaker();

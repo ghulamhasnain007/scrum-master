@@ -8,7 +8,8 @@
  *   Output ← PCM16, 24 kHz, mono, base64
  *
  * One Gemini Live session is shared across the whole standup — as the
- * "current speaker" changes (see MeetingSession's turn handoff), the
+ * "current speaker" changes (see the turn-handoff logic in whatever owns
+ * this service — e.g. DiscordMeetingRoom), the
  * conversation continues in the same session; we just tell the model
  * (via system hints) who it should be addressing now.
  */
@@ -138,6 +139,10 @@ export class GeminiLiveService {
             },
           },
           temperature: 0.75,
+          // Lowest-latency setting — skips extended reasoning before
+          // responding. Fine for a standup facilitator: replies are short,
+          // structured, and don't need deep multi-step reasoning.
+          // thinkingLevel: 'minimal',
         },
         systemInstruction: {
           parts: [{ text: systemPrompt }],
@@ -147,8 +152,13 @@ export class GeminiLiveService {
         realtimeInputConfig: {
           automaticActivityDetection: {
             disabled: false,
-            silenceDurationMs: 800,
-            prefixPaddingMs: 200,
+            // Shorter silence window = the model decides you've finished
+            // talking and starts responding sooner. 800ms->500ms trims a
+            // real, noticeable chunk of perceived latency; below ~400ms
+            // risks cutting people off mid-thought during natural pauses,
+            // so this is close to the practical floor for a voice UI.
+            silenceDurationMs: 500,
+            prefixPaddingMs: 100,
           },
         },
         tools: [
@@ -458,6 +468,7 @@ interface GeminiSetup {
       responseModalities?: string[];
       speechConfig?: object;
       temperature?: number;
+      thinkingLevel?: string;
     };
     systemInstruction?: { parts: { text: string }[] };
     inputAudioTranscription?: object;
