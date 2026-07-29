@@ -33,14 +33,14 @@ async function bootstrap() {
 
   await fastify.listen({ port: config.port, host: config.host });
 
-  console.log(`
-🤖  AI Scrum Master — Gemini Live Backend
-    HTTP  → http://${config.host}:${config.port}
-    Model → ${config.geminiModel}
-    Integrations → http://${config.host}:${config.port}/integrations/providers
+//   console.log(`
+// 🤖  AI Scrum Master — Gemini Live Backend
+//     HTTP  → http://${config.host}:${config.port}
+//     Model → ${config.geminiModel}
+//     Integrations → http://${config.host}:${config.port}/integrations/providers
 
-    Meetings run through Discord (on-demand or scheduled) — see /integrations.
-`);
+//     Meetings run through Discord (on-demand or scheduled) — see /integrations.
+// `);
 }
 
 bootstrap().catch((err) => {

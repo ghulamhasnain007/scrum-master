@@ -203,6 +203,13 @@ export class MeetingStateService {
     return this.state.isActive && this.getElapsedMs() >= this.state.durationMs;
   }
 
+  /** Re-set the current speaker without marking anyone as spoken (used when
+   *  recovering from a null speaker state — e.g. Discord voice input
+   *  arrives after the turn had advanced past all participants). */
+  setCurrentSpeakerId(participantId: string | null): void {
+    this.state.currentSpeakerId = participantId;
+  }
+
   /** Resets meeting progress but keeps the current roster (with hasSpoken cleared). */
   reset(durationMs?: number): void {
     const keepParticipants = this.state.participants.map((p) => ({ ...p, hasSpoken: false }));

@@ -53,37 +53,87 @@ export class GeminiLiveService {
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
-  async connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.ws = new WebSocket(GEMINI_WS_URL);
+  // async connect(): Promise<void> {
+  //   return new Promise((resolve, reject) => {
+  //     this.ws = new WebSocket(GEMINI_WS_URL);
 
-      this.ws.on('open', () => {
-        console.log('[Gemini] WebSocket open');
-        this.sendSetup();
-      });
+  //     this.ws.on('open', () => {
+  //       console.log('[Gemini] WebSocket open');
+  //       this.sendSetup();
+  //     });
 
-      this.ws.on('message', (raw: WebSocket.RawData) => {
-        try {
-          const msg = JSON.parse(raw.toString()) as GeminiServerMsg;
-          this.handleMessage(msg, resolve);
-        } catch (e) {
-          console.error('[Gemini] Parse error', e);
-        }
-      });
+  //     this.ws.on('message', (raw: WebSocket.RawData) => {
+  //       try {
+  //         const msg = JSON.parse(raw.toString()) as GeminiServerMsg;
+  //         this.handleMessage(msg, resolve);
+  //       } catch (e) {
+  //         console.error('[Gemini] Parse error', e);
+  //       }
+  //     });
+private lastActivityAt = Date.now();
+private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
-      this.ws.on('error', (err) => {
-        console.error('[Gemini] WS error', err.message);
-        this.ready = false;
-        this.cb.onError(err.message);
-        reject(err);
-      });
+async connect(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    this.ws = new WebSocket(GEMINI_WS_URL);
 
-      this.ws.on('close', (code, reason) => {
-        console.log(`[Gemini] WS closed ${code} ${reason.toString()}`);
-        this.ready = false;
-      });
+    this.ws.on('open', () => {
+      console.log('[Gemini] WebSocket open');
+      this.sendSetup();
+      this.startHeartbeat();
     });
-  }
+
+    this.ws.on('pong', () => { this.lastActivityAt = Date.now(); });
+
+    this.ws.on('message', (raw) => {
+      this.lastActivityAt = Date.now();
+      try {
+        const msg = JSON.parse(raw.toString()) as GeminiServerMsg;
+        this.handleMessage(msg, resolve);
+      } catch (e) {
+        console.error('[Gemini] Parse error', e);
+      }
+    });
+    // ...error/close handlers stay the same, but both should call stopHeartbeat()
+    this.ws.on('error', (err) => {
+      console.error('[Gemini] WS error', err.message);
+      this.ready = false;
+      this.cb.onError(err.message);
+      reject(err);
+    });
+    
+    // this.ws.on('close', (code, reason) => {
+    //   console.log(`[Gemini] WS closed ${code} ${reason.toString()}`);
+    //   this.ready = false;
+    // });
+    // GeminiLiveService.ts
+    this.ws.on('close', (code, reason) => {
+      console.log(`[Gemini] WS closed ${code} ${reason.toString()}`);
+      this.ready = false;
+      this.cb.onError(`Gemini session closed unexpectedly (${code}): ${reason.toString()}`);
+    });
+  });
+}
+
+private startHeartbeat(): void {
+  this.lastActivityAt = Date.now();
+  this.heartbeatTimer = setInterval(() => {
+    const silentFor = Date.now() - this.lastActivityAt;
+    if (silentFor > 30_000) {
+      console.error(`[Gemini] no activity for ${silentFor}ms — connection appears dead, forcing reconnect`);
+      this.ready = false;
+      this.cb.onError('Gemini connection went silent (no pong/message) — treating as dead');
+      this.ws?.terminate(); // forces a real 'close' event so DiscordMeetingRoom's reconnect logic can fire
+      return;
+    }
+    this.ws?.ping();
+  }, 10_000);
+}
+
+private stopHeartbeat(): void {
+  if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+  this.heartbeatTimer = null;
+}
 
   /** Send PCM16 16 kHz audio from the current speaker's microphone (base64) */
   sendAudio(base64: string): void {
@@ -139,10 +189,18 @@ export class GeminiLiveService {
             },
           },
           temperature: 0.75,
-          // Lowest-latency setting — skips extended reasoning before
-          // responding. Fine for a standup facilitator: replies are short,
-          // structured, and don't need deep multi-step reasoning.
-          // thinkingLevel: 'minimal',
+          // NOTE: thinkingLevel/thinkingConfig is NOT part of the Live
+          // API's generationConfig schema for BidiGenerateContentSetup —
+          // confirmed against Google's own reference, which enumerates the
+          // full accepted field list (candidateCount, maxOutputTokens,
+          // temperature, topP, topK, presencePenalty, frequencyPenalty,
+          // responseModalities, speechConfig) with nothing thinking-related
+          // in it. Setting it (flat or nested) gets rejected outright with
+          // a 1007 close ("Unknown name ... Cannot find field") before the
+          // session can do anything at all — confirmed live. Do not re-add
+          // this without first confirming Google has actually added the
+          // field to the Live API schema, not just the regular
+          // generateContent API (where it does exist).
         },
         systemInstruction: {
           parts: [{ text: systemPrompt }],
@@ -468,7 +526,6 @@ interface GeminiSetup {
       responseModalities?: string[];
       speechConfig?: object;
       temperature?: number;
-      thinkingLevel?: string;
     };
     systemInstruction?: { parts: { text: string }[] };
     inputAudioTranscription?: object;
