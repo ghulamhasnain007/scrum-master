@@ -11,11 +11,7 @@ export const config = {
   // clientContent has been mixed in anywhere in the session's history.
   geminiModel: process.env.GEMINI_MODEL ?? 'gemini-3.1-flash-live-preview',
   defaultMeetingDurationMs: 5 * 60 * 1000,
-  corsOrigin:
-    process.env.CORS_ORIGIN ??
-    (process.env.ENVIRONMENT === 'production'
-      ? 'https://scrum-master-front.vercel.app'
-      : 'http://localhost:5173'),
+  corsOrigin: '*',
 } as const;
 
 if (!config.geminiApiKey) {
