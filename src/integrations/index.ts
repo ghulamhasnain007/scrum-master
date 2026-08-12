@@ -17,6 +17,8 @@ import registerScheduleRoutes from './routes/schedules.js';
 import { MongoScheduledMeetingStore } from './store/mongo/MongoScheduledMeetingStore.js';
 import { SchedulerService } from './scheduling/SchedulerService.js';
 import { DiscordLauncher } from './scheduling/launchers/DiscordLauncher.js';
+import { getDiscordClient } from './discord/DiscordBotClient.js';
+import { setupAmbientAssistant } from './discord/ambient/setupAmbient.js';
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -106,6 +108,19 @@ export async function setupIntegrations(fastify: FastifyInstance): Promise<void>
     fastify.log.info('[integrations] scheduling enabled (MongoDB)');
   } else {
     fastify.log.warn('[integrations] MONGODB_URI not set — meeting scheduling is disabled');
+  }
+
+    // ── Ambient assistant (Feature 2) — additive, independent of scheduling
+  // and on-demand standups above. See AMBIENT_BOT_ARCHITECTURE_PLAN.md.
+  // Mongo-only for now, same simplification already made for scheduling.
+  if (process.env.MONGODB_URI) {
+    const discordCreds = await credentialsStore.get('default', 'discord'); // 'default' — same single-org convention used throughout this module
+    if (discordCreds?.botToken) {
+      const discordClient = await getDiscordClient(discordCreds.botToken);
+      await setupAmbientAssistant(fastify, { discordClient });
+    } else {
+      fastify.log.warn('[integrations] Discord not configured yet — ambient assistant disabled until credentials are added');
+    }
   }
 
   fastify.log.info(
